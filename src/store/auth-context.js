@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+
+let logoutTimer;
 
 const AuthContext = React.createContext({
     token: '',
@@ -16,16 +18,44 @@ const calculateRemainingTime = (expirationTime) => {
     return remainingDuration;
 };
 
+const retrieveStoredToken = () => {
+    const storedToken = localStorage.getItem('token');
+    const storedExpirationDate = localStorage.getItem('expirationTime');
+
+    const remainingTime = calculateRemainingTime(storedExpirationDate);
+
+    if (remainingTime <= 60000) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('expirationTime');
+        return null;
+    }
+
+    return {
+        token: storedToken,
+        duration: remainingTime,
+    };
+};
+
 export const AuthContextProvider = (props) => {
-    const initialToken = localStorage.getItem('token')
+    const tokenData = retrieveStoredToken();
+
+    let initialToken;
+    if (tokenData) {
+        initialToken = tokenData.token;
+    }
     const [token, setToken] = useState(initialToken);
 
     const userIsLoggedIn = !!token;
 
-    const logoutHandler = () => {
+    const logoutHandler = useCallback(() => {
         setToken(null);
-        localStorage.removeItem('token', token)
-    };
+        localStorage.removeItem('token');
+        localStorage.removeItem('expirationTime');
+
+        if (logoutTimer) {
+            clearTimeout(logoutTimer);
+        }
+    }, []);
 
 
     const loginHandler = (token, expirationTime) => {
@@ -35,9 +65,15 @@ export const AuthContextProvider = (props) => {
 
         const remainingTime = calculateRemainingTime(expirationTime);
 
-        setTimeout(logoutHandler, remainingTime);
+        logoutTimer = setTimeout(logoutHandler, remainingTime);
     };
 
+    useEffect(() => {
+        if (tokenData) {
+            console.log(tokenData.duration);
+            logoutTimer = setTimeout(logoutHandler, tokenData.duration);
+        }
+    }, [tokenData, logoutHandler]);
 
     const contextValue = {
         token: token,
